@@ -1,0 +1,684 @@
+# ============================================================================
+# microservices/docker/docker-compose.production.yml
+# ============================================================================
+# Production override for microservices with resource limits, security, and monitoring
+
+version: '3.8'
+
+services:
+  # API Gateway Service - Production Configuration
+  api-gateway:
+    build:
+      context: ../api-gateway
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVICE_NAME=api-gateway
+      - SERVICE_PORT=8000
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/api-gateway:/var/log/api-gateway
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # Orchestration Service - Production Configuration
+  orchestration:
+    build:
+      context: ../orchestration
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8001:8001"
+    environment:
+      - SERVICE_NAME=orchestration
+      - SERVICE_PORT=8001
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/orchestration:/var/log/orchestration
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # RAG Agent Service - Production Configuration
+  rag-agent:
+    build:
+      context: ../agents/rag-agent
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8002:8002"
+    environment:
+      - SERVICE_NAME=rag-agent
+      - SERVICE_PORT=8002
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - VECTOR_DB_HOST=milvus
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/rag-agent:/var/log/rag-agent
+      - ./data/documents:/app/data/documents:ro
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 3G
+        reservations:
+          cpus: '1.0'
+          memory: 1.5G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # Search Agent Service - Production Configuration
+  search-agent:
+    build:
+      context: ../agents/search-agent
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8003:8003"
+    environment:
+      - SERVICE_NAME=search-agent
+      - SERVICE_PORT=8003
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/search-agent:/var/log/search-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # JIRA Agent Service - Production Configuration
+  jira-agent:
+    build:
+      context: ../agents/jira-agent
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8004:8004"
+    environment:
+      - SERVICE_NAME=jira-agent
+      - SERVICE_PORT=8004
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/jira-agent:/var/log/jira-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # LLM Agent Service - Production Configuration
+  llm-agent:
+    build:
+      context: ../agents/llm-agent
+      dockerfile: Dockerfile
+      target: runtime
+    ports:
+      - "8005:8005"
+    environment:
+      - SERVICE_NAME=llm-agent
+      - SERVICE_PORT=8005
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared:ro
+      - ./logs/llm-agent:/var/log/llm-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/tmp
+
+  # Infrastructure Services - Production Configuration
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: microservices_db
+      POSTGRES_USER: microservices_user
+      POSTGRES_PASSWORD: microservices_password
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U microservices_user -d microservices_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+    command: >
+      postgres
+      -c max_connections=200
+      -c shared_buffers=1GB
+      -c effective_cache_size=3GB
+      -c maintenance_work_mem=256MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass microservices_redis_password
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "microservices_redis_password", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1.5G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  consul:
+    image: consul:1.16
+    ports:
+      - "8500:8500"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    command: >
+      consul agent
+      -server
+      -ui
+      -node=server-1
+      -bootstrap-expect=1
+      -client=0.0.0.0
+      -datacenter=dc1
+      -encrypt=your-consul-encryption-key-here
+    volumes:
+      - consul_data:/consul/data
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: microservices_user
+      RABBITMQ_DEFAULT_PASS: microservices_password
+      RABBITMQ_DEFAULT_VHOST: /
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  milvus:
+    image: milvusdb/milvus:v2.3.2
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: >
+      etcd
+      -advertise-client-urls=http://127.0.0.1:2379
+      -listen-client-urls http://0.0.0.0:2379
+      --data-dir /etcd
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/data
+    command: minio server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+
+  # Monitoring Stack - Production Configuration
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-admin-api'
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    security_opt:
+      - no-new-privileges:true
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.35.0
+    ports:
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - microservices-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  consul_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  milvus_data:
+    driver: local
+  etcd_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  microservices-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

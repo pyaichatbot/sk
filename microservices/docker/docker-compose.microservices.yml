@@ -1,0 +1,391 @@
+# ============================================================================
+# microservices/docker/docker-compose.microservices.yml
+# ============================================================================
+version: '3.8'
+
+services:
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: api-gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - SERVICE_NAME=api-gateway
+      - SERVICE_PORT=8000
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/api-gateway:/var/log/api-gateway
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # Orchestration Service
+  orchestration:
+    build:
+      context: ..
+      dockerfile: orchestration/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - SERVICE_NAME=orchestration
+      - SERVICE_PORT=8001
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+      - RABBITMQ_HOST=rabbitmq
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/orchestration:/var/log/orchestration
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # Search Agent Service
+  search-agent:
+    build:
+      context: ..
+      dockerfile: agents/search-agent/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - SERVICE_NAME=search-agent
+      - SERVICE_PORT=8002
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/search-agent:/var/log/search-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # RAG Agent Service
+  rag-agent:
+    build:
+      context: ..
+      dockerfile: agents/rag-agent/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - SERVICE_NAME=rag-agent
+      - SERVICE_PORT=8003
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - VECTOR_DB_HOST=milvus
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/rag-agent:/var/log/rag-agent
+      - ./data/documents:/app/data/documents
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # JIRA Agent Service
+  jira-agent:
+    build:
+      context: ..
+      dockerfile: agents/jira-agent/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      - SERVICE_NAME=jira-agent
+      - SERVICE_PORT=8004
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/jira-agent:/var/log/jira-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # LLM Agent Service
+  llm-agent:
+    build:
+      context: ..
+      dockerfile: agents/llm-agent/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - SERVICE_NAME=llm-agent
+      - SERVICE_PORT=8005
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/llm-agent:/var/log/llm-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # GitLab Agent Service
+  gitlab-agent:
+    build:
+      context: ..
+      dockerfile: agents/gitlab-agent/Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      - SERVICE_NAME=gitlab-agent
+      - SERVICE_PORT=8007
+      - GITLAB_URL=${GITLAB_URL:-https://gitlab.com}
+      - GITLAB_ACCESS_TOKEN=${GITLAB_ACCESS_TOKEN}
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - CONSUL_HOST=consul
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      consul:
+        condition: service_healthy
+    volumes:
+      - ../shared:/app/shared
+      - ./logs/gitlab-agent:/var/log/gitlab-agent
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  # Infrastructure Services
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: microservices_db
+      POSTGRES_USER: microservices_user
+      POSTGRES_PASSWORD: microservices_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U microservices_user -d microservices_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass microservices_redis_password
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  consul:
+    image: consul:1.16
+    ports:
+      - "8500:8500"
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+    command: consul agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0
+    volumes:
+      - consul_data:/consul/data
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: microservices_user
+      RABBITMQ_DEFAULT_PASS: microservices_password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  milvus:
+    image: milvusdb/milvus:v2.3.2
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    depends_on:
+      - etcd
+      - minio
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - microservices-network
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - microservices-network
+
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - minio_data:/data
+    command: minio server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - microservices-network
+
+  # Monitoring Stack
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - microservices-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - microservices-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.35.0
+    ports:
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "9411:9411"
+    networks:
+      - microservices-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  consul_data:
+  rabbitmq_data:
+  milvus_data:
+  etcd_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  microservices-network:
+    driver: bridge

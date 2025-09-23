@@ -1,0 +1,59 @@
+# RAG Agent Service Requirements
+# Based on orchestration service requirements with RAG-specific additions
+
+# Core Framework (from orchestration service)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic==2.9.2
+pydantic-settings>=2.1.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+python-dotenv==1.0.1
+
+# Microsoft Semantic Kernel (updated version)
+semantic-kernel==1.37.0
+openai>=1.98.0
+
+# Redis for Session Management
+redis[hiredis]>=5.0.0
+
+# Database Support
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg>=0.29.0
+
+# Message Queue Support
+aio-pika>=9.0.0
+
+# Service Discovery
+python-consul2>=0.1.5
+
+# HTTP Client for Agent Communication
+httpx>=0.25.0
+aiohttp>=3.9.0
+
+# RAG-specific dependencies
+# Document processing
+PyPDF2==3.0.1
+python-docx==1.1.0
+beautifulsoup4==4.12.2
+lxml==4.9.3
+
+# Vector database and embeddings
+chromadb==0.4.15
+sentence-transformers==2.2.2
+faiss-cpu==1.7.4
+
+# AI and ML dependencies
+numpy>=1.25.0
+scikit-learn>=1.4.0
+pandas>=2.1.4
+
+# Monitoring and observability
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+urllib3==2.1.0

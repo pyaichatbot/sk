@@ -1,0 +1,34 @@
+docker buildx prune -a -f --filter until=168h
+
+docker volume ls -qf dangling=true | xargs -r docker volume rm
+
+docker system df -v
+
+rm -f ~/Library/Containers/com.docker.docker/Data/vms/0/data/Docker.raw
+
+ls -lh ~/Library/Containers/com.docker.docker/Data/vms/0/data/
+docker system df
+docker buildx du    
+
+docker system prune -a --volumes -f
+
+killall Docker "Docker Desktop"; open -a Docker
+
+
+@IMPLEMENTATION_ROADMAP.md @enterprise_agentic_system.md @copilot-instructions.md 
+
+lets start with task1 from todo list. always memorize the qualities of code. it must be enterprise standard production grade. no hallucinations, no dummy, no simulation. only real production implementation. implement one task at a time. self-review the code as a senior architect. always strictly follow - no breaking the existing code.
+
+code - clean, scalable, separation of concerns, easy to maintain, easy to trouble shoot.
+
+
+�� Minor Recommendations for Enhancement
+Metrics Export: Consider adding Prometheus metrics export for monitoring systems
+Service Mesh Integration: Future enhancement for Istio/Linkerd integration
+Caching Layer: Add Redis-based service instance caching for performance
+Rate Limiting: Add per-service rate limiting capabilities
+
+
+proceed to next task implementation in the todo list that is service discovery , remember the code quality strictly a entrprise production standard, following solid principles, review once the implementation is completed as a senior architect, if any issues identified in the review, fix them with atmost care. keep the code clean, scalable, easy to maintain and troubleshoot.
+
+@src/ see if any old code could be resued. @microservices/ or any existing code already exists. only enhance if any existing code, do not create duplicate or buggy code.

@@ -1,0 +1,44 @@
+# GitLab Agent Service Requirements
+# Based on search-agent requirements with GitLab-specific additions
+
+# Core Framework (from search-agent)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic==2.9.2
+pydantic-settings>=2.1.0
+python-multipart==0.0.6
+aiofiles==23.2.1
+python-dotenv==1.0.1
+
+# AI and ML dependencies
+semantic-kernel==1.37.0
+openai>=1.98.0
+
+# GitLab integration
+aiohttp>=3.9.0
+requests>=2.31.0
+
+# HTTP client
+httpx==0.25.2
+
+# Database and storage
+sqlalchemy==2.0.23
+alembic==1.12.1
+asyncpg==0.29.0
+redis[hiredis]>=5.0.0
+
+# Message Queue Support
+aio-pika>=9.0.0
+
+# Service Discovery
+python-consul2>=0.1.5
+
+# Monitoring and observability
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+urllib3==2.1.0
+PyYAML==6.0.1
