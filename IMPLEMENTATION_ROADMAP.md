@@ -65,9 +65,9 @@ This document outlines the comprehensive implementation roadmap for transforming
 | `sk_patterns_migration` | Migrate current orchestration patterns to use Semantic Kernel Agent Orchestration framework | 🔄 Pending | Medium | unique_communication_interface |
 | `runtime_implementation` | Implement InProcessRuntime and orchestration result handling as per SK documentation | 🔄 Pending | Medium | sk_patterns_migration |
 | `agent_capability_mapping` | Map current agent capabilities to SK Agent Framework requirements | 🔄 Pending | Medium | sk_patterns_migration |
-| `sk_agent_templates_audit` | Audit Semantic Kernel Agent Templates framework and integrate YAML-based agent creation | 🔄 In Progress | Medium | agent_capability_mapping |
-| `yaml_agent_definitions` | Create YAML template system for agent definitions with dynamic parameter substitution | 🔄 Pending | Medium | sk_agent_templates_audit |
-| `prompt_template_integration` | Integrate PromptTemplateConfig and KernelPromptTemplateFactory for flexible agent instructions | 🔄 Pending | Medium | yaml_agent_definitions |
+| `sk_agent_templates_audit` | Audit Semantic Kernel Agent Templates framework and integrate YAML-based agent creation | ✅ Completed | Medium | agent_capability_mapping |
+| `yaml_agent_definitions` | Create YAML template system for agent definitions with dynamic parameter substitution | ✅ Completed | Medium | sk_agent_templates_audit |
+| `prompt_template_integration` | Integrate PromptTemplateConfig and KernelPromptTemplateFactory for flexible agent instructions | ✅ Completed | Medium | yaml_agent_definitions |
 | `agent_template_registry` | Create agent template registry for managing and loading YAML-based agent definitions | 🔄 Pending | Medium | prompt_template_integration |
 | `dynamic_agent_creation` | Implement dynamic agent creation from YAML templates with runtime parameter injection | 🔄 Pending | Medium | agent_template_registry |
 | `template_validation` | Add YAML template validation and schema checking for agent definitions | 🔄 Pending | Medium | dynamic_agent_creation |
@@ -90,21 +90,21 @@ This document outlines the comprehensive implementation roadmap for transforming
 ## 📊 Progress Summary
 
 - **Total Tasks**: 39
-- **Completed**: 12 (31%)
-- **In Progress**: 1 (3%)
-- **Pending**: 26 (67%)
+- **Completed**: 15 (38%)
+- **In Progress**: 0 (0%)
+- **Pending**: 24 (62%)
 
 ### **By Priority:**
 - **High Priority**: 11 completed, 10 pending (21 tasks total - 52% complete)
 - **Critical Priority**: 1 task completed (**MANDATORY** - Intermediate Message Handling ✅)
-- **Medium Priority**: 14 tasks (36%)
-- **Low Priority**: 3 tasks (8%)
+- **Medium Priority**: 3 completed, 11 pending (14 tasks total - 21% complete)
+- **Low Priority**: 0 completed, 8 pending (8 tasks total - 0% complete)
 
 ### **By Phase:**
 - **Phase 1 (Core Infrastructure)**: 11 tasks ✅ **COMPLETED**
 - **Phase 2 (Advanced Infrastructure)**: 15 tasks (1 completed, 14 pending - includes 5 new SK Observability tasks)
 - **Phase 3 (Testing & Documentation)**: 5 tasks
-- **Phase 4 (SK Integration)**: 12 tasks
+- **Phase 4 (SK Integration)**: 3 completed, 9 pending (12 tasks total - 25% complete)
 - **Phase 5 (Dynamic Agent Creation)**: 8 tasks
 
 ## 🎯 Key Milestones
@@ -115,6 +115,14 @@ This document outlines the comprehensive implementation roadmap for transforming
 - Microsoft SK Agent Orchestration service operational ✅
 - Enterprise-grade API Gateway with Consul service discovery ✅
 - Message queue and database per service implemented ✅
+
+### **Milestone 1.5: Service Discovery Integration** ✅ **ACHIEVED**
+- All 7 microservices integrated with Consul service discovery ✅
+- Auto-registration and health monitoring implemented ✅
+- Service discovery endpoints (`/service-info`, `/discovery-metrics`) added ✅
+- Load balancing and circuit breaker patterns implemented ✅
+- YAML-based agent templates with dynamic configuration ✅
+- PromptTemplateConfig integration for flexible agent instructions ✅
 
 ### **Milestone 2: Production Ready (End of Phase 2)** ⚠️ **Enhanced with SK Observability**
 - Full observability stack deployed ⚠️ **Enhanced with SK observability**
@@ -178,9 +186,12 @@ This roadmap will be updated as tasks are completed and new requirements emerge.
 - ✅ Added 5 new Semantic Kernel Observability tasks to Phase 2
 - ✅ **COMPLETED** `sk_intermediate_messaging` - **CRITICAL/MANDATORY** task now operational
 - 🔧 Marked other SK observability tasks as **OPTIONAL** and configurable
-- 📊 Updated progress summary: 12/39 tasks completed (31% complete)
+- 📊 Updated progress summary: 15/39 tasks completed (38% complete)
 - 🎯 Enhanced Milestone 2 with SK observability requirements
 - 🚀 **MAJOR MILESTONE**: Real-time agent call visibility system fully implemented and integrated
+- ✅ **COMPLETED** Service Discovery Integration - All 7 microservices now integrated with Consul
+- ✅ **COMPLETED** YAML Agent Templates - GitLab agent now uses YAML-based configuration
+- ✅ **COMPLETED** PromptTemplateConfig Integration - Dynamic agent instruction loading implemented
 
 ---
 

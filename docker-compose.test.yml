@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Consul for service discovery
+  consul:
+    image: consul:1.15
+    ports:
+      - "8500:8500"
+    command: consul agent -server -ui -node=server-1 -bootstrap-expect=1 -client=0.0.0.0 -data-dir=/tmp/consul
+
+  # PostgreSQL for orchestration service
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orchestration_db
+      POSTGRES_USER: orchestration_user
+      POSTGRES_PASSWORD: orchestration_password
+    ports:
+      - "5432:5432"
+
+  # Redis for caching
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # RabbitMQ for messaging
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: orchestration_user
+      RABBITMQ_DEFAULT_PASS: orchestration_password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  # Orchestration Service
+  orchestration:
+    build:
+      context: .
+      dockerfile: microservices/orchestration/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - ENVIRONMENT=development
+      - CONSUL_HOST=consul
+      - CONSUL_PORT=8500
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=orchestration_db
+      - POSTGRES_USER=orchestration_user
+      - POSTGRES_PASSWORD=orchestration_password
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=orchestration_user
+      - RABBITMQ_PASSWORD=orchestration_password
+    depends_on:
+      - consul
+      - postgres
+      - redis
+      - rabbitmq

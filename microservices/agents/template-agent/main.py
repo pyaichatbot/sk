@@ -25,6 +25,11 @@ from shared.config.settings import MicroserviceSettings
 from shared.infrastructure.database import DatabaseManager
 from shared.models import AgentRequest, AgentResponse, AgentCapabilities, HealthResponse
 from shared.infrastructure.observability.logging import get_logger
+from shared.infrastructure.discovery_integration import (
+    ServiceDiscoveryIntegration,
+    create_service_discovery_config,
+    set_global_integration
+)
 
 # Import template agent implementation
 from template_agent import TemplateAgent
@@ -35,11 +40,12 @@ logger = get_logger(__name__)
 
 # Global agent instance
 template_agent: Optional[TemplateAgent] = None
+service_discovery_integration: Optional[ServiceDiscoveryIntegration] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    global template_agent
+    global template_agent, service_discovery_integration
     
     # Startup
     logger.info("Starting Template Agent Service")
@@ -53,6 +59,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Database connection failed (continuing without database): {e}")
             db_manager = None
+        
+        # Initialize service discovery integration
+        try:
+            service_discovery_config = create_service_discovery_config(
+                service_name=settings.service_name,
+                service_port=settings.service_port,
+                health_endpoint="/health",
+                tags=["template-agent", "agent", "template", "customizable"],
+                metadata={
+                    "version": settings.service_version,
+                    "environment": settings.environment.value,
+                    "capabilities": ["template_processing", "custom_operations", "data_processing"]
+                }
+            )
+            
+            service_discovery_integration = ServiceDiscoveryIntegration(settings, service_discovery_config)
+            await service_discovery_integration.initialize()
+            
+            # Set global integration for easy access
+            set_global_integration(service_discovery_integration)
+            
+            logger.info("Service discovery integration initialized successfully")
+        except Exception as e:
+            logger.warning(f"Service discovery integration failed (continuing without service discovery): {e}")
+            service_discovery_integration = None
         
         # Initialize Template agent
         template_agent = TemplateAgent(settings)
@@ -68,12 +99,20 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down Template Agent Service")
+    
     if template_agent:
         try:
             await template_agent.cleanup()
             logger.info("Template agent cleaned up successfully")
         except Exception as e:
             logger.error(f"Error cleaning up template agent: {e}")
+    
+    if service_discovery_integration:
+        try:
+            await service_discovery_integration.shutdown()
+            logger.info("Service discovery integration cleaned up successfully")
+        except Exception as e:
+            logger.error(f"Error cleaning up service discovery integration: {e}")
 
 # Create FastAPI app
 app = FastAPI(
@@ -104,19 +143,67 @@ class TemplateResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
-    if template_agent:
-        return template_agent.get_health_status()
-    else:
-        return HealthResponse(
-            status="unhealthy",
-            service="template-agent",
-            version="1.0.0",
-            uptime=0.0,
-            timestamp="2024-01-01T00:00:00Z",
-            checks={},
-            dependencies={},
-            metadata={}
-        )
+    if not template_agent:
+        raise HTTPException(status_code=503, detail="Service not initialized")
+    
+    # Get service discovery health if available
+    discovery_health = {}
+    if service_discovery_integration and service_discovery_integration.discovery_manager:
+        try:
+            discovery_health = await service_discovery_integration.discovery_manager.health_check()
+        except Exception as e:
+            logger.warning(f"Failed to get service discovery health: {e}")
+    
+    health_status = template_agent.get_health_status()
+    
+    return HealthResponse(
+        status=health_status["status"],
+        service="template-agent",
+        version="1.0.0",
+        uptime=health_status.get("uptime", 0),
+        metadata={
+            **health_status,
+            "service_discovery": discovery_health
+        }
+    )
+
+
+@app.get("/service-info", summary="Get service discovery information")
+async def get_service_info():
+    """
+    Get service discovery information for the Template Agent.
+    Returns:
+        dict: Service discovery information.
+    """
+    if service_discovery_integration:
+        return {
+            "service_name": settings.service_name,
+            "service_port": settings.service_port,
+            "version": settings.service_version,
+            "environment": settings.environment.value,
+            "tags": ["template-agent", "agent", "template", "customizable"],
+            "metadata": {
+                "capabilities": ["template_processing", "custom_operations", "data_processing"]
+            },
+            "is_initialized": service_discovery_integration.is_initialized
+        }
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
+
+
+@app.get("/discovery-metrics", summary="Get service discovery metrics")
+async def get_discovery_metrics():
+    """
+    Get service discovery metrics for the Template Agent.
+    Returns:
+        dict: Service discovery metrics.
+    """
+    if service_discovery_integration and service_discovery_integration.discovery_manager:
+        try:
+            return await service_discovery_integration.discovery_manager.get_metrics()
+        except Exception as e:
+            logger.error(f"Failed to get service discovery metrics: {e}")
+            return {"error": str(e)}
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
 
 # Agent Capabilities Endpoint
 @app.get("/capabilities")

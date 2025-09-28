@@ -71,7 +71,7 @@ class AgentFactory:
             logger.info(f"Agent Factory initialized with {len(self.agent_configs)} agent configs")
             
         except Exception as e:
-            logger.error("Failed to initialize Agent Factory", error=e)
+            logger.error(f"Failed to initialize Agent Factory: {str(e)}")
             raise
     
     async def _load_agent_configs(self):
@@ -200,7 +200,7 @@ class AgentFactory:
             logger.info(f"Loaded {len(self.agent_configs)} agent configurations")
             
         except Exception as e:
-            logger.error("Failed to load agent configurations", error=e)
+            logger.error(f"Failed to load agent configurations: {str(e)}")
             raise
     
     async def create_agent(self, agent_name: str, config: AgentConfig) -> ChatCompletionAgent:
@@ -241,7 +241,7 @@ class AgentFactory:
             return agent
             
         except Exception as e:
-            logger.error(f"Failed to create agent: {agent_name}", error=e)
+            logger.error(f"Failed to create agent {agent_name}: {str(e)}")
             raise
     
     async def get_agent_configs(self) -> Dict[str, AgentConfig]:
@@ -265,7 +265,7 @@ class AgentFactory:
             return agents
             
         except Exception as e:
-            logger.error("Failed to create all agents", error=e)
+            logger.error(f"Failed to create all agents: {str(e)}")
             raise
     
     async def get_agent_info(self, agent_name: str) -> Optional[Dict[str, Any]]:
@@ -317,7 +317,7 @@ class AgentFactory:
             return health_status
             
         except Exception as e:
-            logger.error("Agent factory health check failed", error=e)
+            logger.error(f"Agent factory health check failed: {str(e)}")
             return {
                 "status": "unhealthy",
                 "error": str(e)
@@ -332,4 +332,4 @@ class AgentFactory:
             logger.info("Agent Factory cleanup completed")
             
         except Exception as e:
-            logger.error("Failed to cleanup Agent Factory", error=e)
+            logger.error(f"Failed to cleanup Agent Factory: {str(e)}")

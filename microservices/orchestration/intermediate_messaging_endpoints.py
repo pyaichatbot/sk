@@ -101,7 +101,7 @@ class WebSocketConnectionManager:
                 if connection_id in self.connection_metadata:
                     self.connection_metadata[connection_id]["last_activity"] = datetime.utcnow()
             except Exception as e:
-                logger.error("Failed to send message", error=e, connection_id=connection_id)
+                logger.error(f"Failed to send message to connection {connection_id}: {str(e)}")
                 raise
     
     async def broadcast(self, message: str, exclude_connections: Optional[List[str]] = None):
@@ -215,7 +215,7 @@ async def websocket_agent_calls(
                 except json.JSONDecodeError:
                     logger.warning("Invalid JSON received from client", connection_id=connection_id)
                 except Exception as e:
-                    logger.error("Error handling client message", error=e, connection_id=connection_id)
+                    logger.error(f"Error handling client message for connection {connection_id}: {str(e)}")
                 
             except asyncio.TimeoutError:
                 # Send heartbeat to keep connection alive
@@ -230,7 +230,7 @@ async def websocket_agent_calls(
                 break
                 
     except Exception as e:
-        logger.error("WebSocket connection error", error=e, connection_id=connection_id)
+        logger.error(f"WebSocket connection error for connection {connection_id}: {str(e)}")
         try:
             await websocket.close(code=1011, reason=str(e))
         except:
@@ -308,7 +308,7 @@ async def get_event_history(
         )
         
     except Exception as e:
-        logger.error("Failed to get event history", error=e, session_id=request.session_id)
+        logger.error(f"Failed to get event history for session {request.session_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get event history: {str(e)}")
 
 async def get_messaging_metrics(
@@ -323,7 +323,7 @@ async def get_messaging_metrics(
         return metrics.dict()
         
     except Exception as e:
-        logger.error("Failed to get messaging metrics", error=e)
+        logger.error(f"Failed to get messaging metrics: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
 
 async def get_messaging_health(
@@ -341,7 +341,7 @@ async def get_messaging_health(
         return health_status
         
     except Exception as e:
-        logger.error("Failed to get messaging health", error=e)
+        logger.error(f"Failed to get messaging health: {str(e)}")
         return {
             "status": "unhealthy",
             "message": f"Health check failed: {str(e)}"
@@ -370,7 +370,7 @@ async def get_active_connections() -> Dict[str, Any]:
         }
         
     except Exception as e:
-        logger.error("Failed to get active connections", error=e)
+        logger.error(f"Failed to get active connections: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get connections: {str(e)}")
 
 # Utility functions for emitting events
@@ -438,7 +438,7 @@ async def emit_agent_call_event(
         return success
         
     except Exception as e:
-        logger.error("Error emitting agent call event", error=e)
+        logger.error(f"Error emitting agent call event: {str(e)}")
         return False
 
 # Context manager for tracking agent calls

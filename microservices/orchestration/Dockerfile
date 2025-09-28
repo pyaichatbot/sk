@@ -30,7 +30,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
     # Copy and install Python dependencies
-    COPY orchestration/requirements.txt .
+    COPY microservices/orchestration/requirements.txt .
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
@@ -53,6 +53,9 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+# Install test dependencies
+RUN pip install httpx
+
 # Copy virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
 
@@ -64,10 +67,13 @@ RUN groupadd -r orchestration -g 1001 && \
     useradd -r -g orchestration -u 1001 -d /app -s /bin/bash orchestration
 
 # Copy shared modules first (for better layer caching)
-COPY --chown=orchestration:orchestration shared /app/shared
+COPY --chown=orchestration:orchestration microservices/shared /app/shared
 
 # Copy application code with proper ownership
-COPY --chown=orchestration:orchestration orchestration/ .
+COPY --chown=orchestration:orchestration microservices/orchestration/ .
+
+# Copy test file
+COPY --chown=orchestration:orchestration test_orchestration.py .
 
 # Create necessary directories with proper permissions
 RUN mkdir -p /app/logs /app/data /app/tmp && \

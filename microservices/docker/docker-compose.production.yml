@@ -424,7 +424,7 @@ services:
       - no-new-privileges:true
 
   consul:
-    image: consul:1.16
+    image: consul:1.15
     ports:
       - "8500:8500"
     environment:

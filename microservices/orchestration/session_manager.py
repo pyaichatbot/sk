@@ -103,7 +103,7 @@ class SessionManager:
             logger.info("Session Manager Redis connection established")
             
         except Exception as e:
-            logger.error("Failed to initialize Session Manager", error=e)
+            logger.error(f"Failed to initialize Session Manager: {str(e)}")
             raise
     
     async def get_or_create_thread(
@@ -145,7 +145,7 @@ class SessionManager:
             return thread
             
         except Exception as e:
-            logger.error("Failed to get or create thread", error=e, session_id=session_id)
+            logger.error(f"Failed to get or create thread for session {session_id}: {str(e)}")
             # Fallback: create new thread without Redis persistence
             thread = ChatHistoryAgentThread()
             self.active_threads[session_id] = thread
@@ -186,7 +186,7 @@ class SessionManager:
             return thread
             
         except Exception as e:
-            logger.error("Failed to restore thread from Redis", error=e, session_id=session_id)
+            logger.error(f"Failed to restore thread from Redis for session {session_id}: {str(e)}")
             return None
     
     async def _store_session_info(self, session_info: SessionInfo):
@@ -210,7 +210,7 @@ class SessionManager:
             logger.debug("Stored session info", session_id=session_info.session_id)
             
         except Exception as e:
-            logger.error("Failed to store session info", error=e, session_id=session_info.session_id)
+            logger.error(f"Failed to store session info for session {session_info.session_id}: {str(e)}")
     
     async def _update_session_activity(self, session_id: str):
         """Update session last activity timestamp"""
@@ -226,7 +226,7 @@ class SessionManager:
             )
             
         except Exception as e:
-            logger.error("Failed to update session activity", error=e, session_id=session_id)
+            logger.error(f"Failed to update session activity for session {session_id}: {str(e)}")
     
     async def get_session_info(self, session_id: str) -> Optional[SessionInfo]:
         """Get session information"""
@@ -243,7 +243,7 @@ class SessionManager:
             return SessionInfo.from_dict(session_data)
             
         except Exception as e:
-            logger.error("Failed to get session info", error=e, session_id=session_id)
+            logger.error(f"Failed to get session info for session {session_id}: {str(e)}")
             return None
     
     async def delete_session(self, session_id: str):
@@ -274,7 +274,7 @@ class SessionManager:
             logger.info("Deleted session", session_id=session_id)
             
         except Exception as e:
-            logger.error("Failed to delete session", error=e, session_id=session_id)
+            logger.error(f"Failed to delete session {session_id}: {str(e)}")
             raise
     
     async def list_sessions(
@@ -311,7 +311,7 @@ class SessionManager:
             return sessions
             
         except Exception as e:
-            logger.error("Failed to list sessions", error=e)
+            logger.error(f"Failed to list sessions: {str(e)}")
             return []
     
     async def cleanup_expired_sessions(self, max_age_hours: int = 24):
@@ -343,7 +343,7 @@ class SessionManager:
             return len(expired_sessions)
             
         except Exception as e:
-            logger.error("Failed to cleanup expired sessions", error=e)
+            logger.error(f"Failed to cleanup expired sessions: {str(e)}")
             return 0
     
     async def get_health_status(self) -> Dict[str, Any]:
@@ -370,7 +370,7 @@ class SessionManager:
             }
             
         except Exception as e:
-            logger.error("Session manager health check failed", error=e)
+            logger.error(f"Session manager health check failed: {str(e)}")
             return {
                 "status": "unhealthy",
                 "error": str(e)
@@ -389,7 +389,7 @@ class SessionManager:
             logger.info("Session Manager cleanup completed")
             
         except Exception as e:
-            logger.error("Failed to cleanup Session Manager", error=e)
+            logger.error(f"Failed to cleanup Session Manager: {str(e)}")
     
     async def close(self):
         """Close Redis connection (deprecated, use cleanup instead)"""

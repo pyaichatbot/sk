@@ -48,6 +48,8 @@ from shared.config.settings import MicroserviceSettings
 # Local imports
 from session_manager import SessionManager
 from agent_factory import AgentFactory
+from handoff_manager import EnterpriseHandoffManager
+from group_chat_manager import EnterpriseGroupChatManager
 from intermediate_messaging_endpoints import emit_agent_call_event, track_agent_call
 from shared.models.intermediate_messaging import AgentCallEventType, AgentCallStatus
 
@@ -81,6 +83,10 @@ class EnterpriseOrchestrationEngine:
         
         # Agent instances
         self.agents: Dict[str, ChatCompletionAgent] = {}
+        
+        # Enterprise managers
+        self.handoff_manager = EnterpriseHandoffManager(agent_factory, settings)
+        self.group_chat_manager = EnterpriseGroupChatManager(agent_factory, settings)
         
         logger.info("Enterprise Orchestration Engine initialized")
     
@@ -154,24 +160,36 @@ class EnterpriseOrchestrationEngine:
                 members=list(self.agents.values())
             )
             
-            # TODO: Initialize complex orchestrations when needed
-            # Handoff Orchestration requires handoffs parameter
-            # self.orchestrations["handoff"] = HandoffOrchestration(
-            #     members=list(self.agents.values()),
-            #     handoffs=OrchestrationHandoffs()
-            # )
+            # Initialize complex orchestrations with fallback implementations
+            # Handoff Orchestration - Use sequential as fallback
+            try:
+                self.orchestrations["handoff"] = HandoffOrchestration(
+                    members=list(self.agents.values()),
+                    handoffs={}  # Empty handoffs for now
+                )
+            except Exception as e:
+                logger.warning(f"Handoff orchestration not available, using sequential fallback: {e}")
+                self.orchestrations["handoff"] = self.orchestrations["sequential"]
             
-            # Group Chat Orchestration requires manager parameter
-            # self.orchestrations["group_chat"] = GroupChatOrchestration(
-            #     members=list(self.agents.values()),
-            #     manager=GroupChatManager()
-            # )
+            # Group Chat Orchestration - Use concurrent as fallback
+            try:
+                self.orchestrations["group_chat"] = GroupChatOrchestration(
+                    members=list(self.agents.values()),
+                    manager=None  # No manager for now
+                )
+            except Exception as e:
+                logger.warning(f"Group chat orchestration not available, using concurrent fallback: {e}")
+                self.orchestrations["group_chat"] = self.orchestrations["concurrent"]
             
-            # Magentic Orchestration requires manager parameter
-            # self.orchestrations["magentic"] = MagenticOrchestration(
-            #     members=list(self.agents.values()),
-            #     manager=StandardMagenticManager()
-            # )
+            # Magentic Orchestration - Use sequential as fallback
+            try:
+                self.orchestrations["magentic"] = MagenticOrchestration(
+                    members=list(self.agents.values()),
+                    manager=None  # No manager for now
+                )
+            except Exception as e:
+                logger.warning(f"Magentic orchestration not available, using sequential fallback: {e}")
+                self.orchestrations["magentic"] = self.orchestrations["sequential"]
             
             logger.info("Initialized basic orchestration patterns")
             
@@ -204,7 +222,7 @@ class EnterpriseOrchestrationEngine:
             input_message=request.message,
             status=AgentCallStatus.RUNNING,
             metadata={
-                "pattern": request.pattern.value,
+                "pattern": request.pattern,
                 "agents_required": request.agents_required,
                 "max_iterations": request.max_iterations
             }
@@ -264,7 +282,7 @@ class EnterpriseOrchestrationEngine:
                 output_message=response.final_output,
                 status=AgentCallStatus.COMPLETED,
                 metadata={
-                    "pattern": request.pattern.value,
+                    "pattern": request.pattern,
                     "duration_ms": response.duration_ms,
                     "steps_count": len(response.steps),
                     "agents_used": response.agents_used
@@ -281,7 +299,7 @@ class EnterpriseOrchestrationEngine:
             return response
             
         except Exception as e:
-            logger.error("Orchestration failed", error=e, request_id=request_id)
+            logger.error(f"Orchestration failed for request {request_id}: {str(e)}")
             
             # Emit orchestration error event
             await emit_agent_call_event(
@@ -294,7 +312,7 @@ class EnterpriseOrchestrationEngine:
                 error_message=str(e),
                 status=AgentCallStatus.FAILED,
                 metadata={
-                    "pattern": request.pattern.value,
+                    "pattern": request.pattern,
                     "error_type": type(e).__name__
                 }
             )
@@ -357,7 +375,7 @@ class EnterpriseOrchestrationEngine:
                 raise ValueError(f"Unsupported orchestration pattern: {request.pattern}")
                 
         except Exception as e:
-            logger.error("Streaming orchestration failed", error=e)
+            logger.error(f"Streaming orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"error-{datetime.utcnow().timestamp()}",
                 agent_name="orchestrator",
@@ -408,7 +426,7 @@ class EnterpriseOrchestrationEngine:
             response.final_output = final_output
             
         except Exception as e:
-            logger.error("Sequential orchestration failed", error=e)
+            logger.error(f"Sequential orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"seq-error-{datetime.utcnow().timestamp()}",
                 agent_name="sequential_orchestration",
@@ -460,7 +478,7 @@ class EnterpriseOrchestrationEngine:
             response.final_output = final_output
             
         except Exception as e:
-            logger.error("Concurrent orchestration failed", error=e)
+            logger.error(f"Concurrent orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"conc-error-{datetime.utcnow().timestamp()}",
                 agent_name="concurrent_orchestration",
@@ -479,40 +497,39 @@ class EnterpriseOrchestrationEngine:
         response: OrchestrationResponse,
         thread: ChatHistoryAgentThread
     ):
-        """Execute handoff orchestration using Microsoft SK"""
+        """Execute handoff orchestration using Enterprise Handoff Manager"""
         try:
-            # Get handoff orchestration
-            orchestration = self.orchestrations["handoff"]
+            # Use enterprise handoff manager
+            handoff_result = await self.handoff_manager.execute_handoff_chain(request)
             
-            # Create task message
-            task_message = ChatMessageContent(
-                role=AuthorRole.USER,
-                content=request.message
-            )
+            # Create orchestration steps from handoff result
+            for i, agent_id in enumerate(handoff_result.agents_used):
+                step = OrchestrationStep(
+                    step_id=f"handoff-{i}-{datetime.utcnow().timestamp()}",
+                    agent_name=agent_id,
+                    input_message=request.message,
+                    output=handoff_result.final_output if i == len(handoff_result.agents_used) - 1 else None,
+                    status=OrchestrationStatus.COMPLETED,
+                    success=True,
+                    start_time=datetime.utcnow(),
+                    end_time=datetime.utcnow()
+                )
+                response.steps.append(step)
             
-            # Execute orchestration
-            result = await orchestration.invoke(task_message, self.runtime)
+            # Set final output
+            response.final_output = handoff_result.final_output
+            response.success = handoff_result.success
             
-            # Process result
-            final_output = await result.get()
-            
-            # Create step
-            step = OrchestrationStep(
-                step_id=f"handoff-{datetime.utcnow().timestamp()}",
-                agent_name="handoff_orchestration",
-                input_message=request.message,
-                output=final_output,
-                status=OrchestrationStatus.COMPLETED,
-                success=True,
-                start_time=datetime.utcnow(),
-                end_time=datetime.utcnow()
-            )
-            
-            response.steps.append(step)
-            response.final_output = final_output
+            # Update response metadata
+            response.metadata.update({
+                "handoff_chain": handoff_result.chain_id,
+                "context_passed": handoff_result.context_passed,
+                "agents_used": handoff_result.agents_used,
+                "handoff_points": handoff_result.handoff_points
+            })
             
         except Exception as e:
-            logger.error("Handoff orchestration failed", error=e)
+            logger.error(f"Handoff orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"handoff-error-{datetime.utcnow().timestamp()}",
                 agent_name="handoff_orchestration",
@@ -531,40 +548,87 @@ class EnterpriseOrchestrationEngine:
         response: OrchestrationResponse,
         thread: ChatHistoryAgentThread
     ):
-        """Execute group chat orchestration using Microsoft SK"""
+        """Execute group chat orchestration using Enterprise Group Chat Manager"""
         try:
-            # Get group chat orchestration
-            orchestration = self.orchestrations["group_chat"]
+            # Determine participants from request or use default
+            participants = request.agents_required or ["llm-agent", "search-agent", "rag-agent"]
             
-            # Create task message
-            task_message = ChatMessageContent(
-                role=AuthorRole.USER,
-                content=request.message
+            # Start group chat session
+            session = await self.group_chat_manager.start_collaboration(
+                request=request,
+                participants=participants,
+                moderator="llm-agent",  # Use LLM agent as moderator
+                discussion_goals=[request.message]
             )
             
-            # Execute orchestration
-            result = await orchestration.invoke(task_message, self.runtime)
-            
-            # Process result
-            final_output = await result.get()
-            
-            # Create step
-            step = OrchestrationStep(
-                step_id=f"group-{datetime.utcnow().timestamp()}",
-                agent_name="group_chat_orchestration",
-                input_message=request.message,
-                output=final_output,
-                status=OrchestrationStatus.COMPLETED,
-                success=True,
-                start_time=datetime.utcnow(),
-                end_time=datetime.utcnow()
+            # Facilitate discussion
+            messages = await self.group_chat_manager.facilitate_discussion(
+                session=session,
+                message=request.message
             )
             
-            response.steps.append(step)
+            # Try to reach consensus
+            consensus_result = await self.group_chat_manager.reach_consensus(
+                session=session,
+                topic=request.message
+            )
+            
+            # Create orchestration steps from group chat results
+            for i, message in enumerate(messages):
+                step = OrchestrationStep(
+                    step_id=f"group-{i}-{datetime.utcnow().timestamp()}",
+                    agent_name=message.sender_id,
+                    input_message=request.message,
+                    output=AgentResponse(
+                        content=message.content,
+                        success=True,
+                        metadata={"message_type": message.message_type.value}
+                    ),
+                    status=OrchestrationStatus.COMPLETED,
+                    success=True,
+                    start_time=datetime.utcnow(),
+                    end_time=datetime.utcnow()
+                )
+                response.steps.append(step)
+            
+            # Set final output based on consensus
+            if consensus_result.consensus_reached:
+                final_output = AgentResponse(
+                    content=consensus_result.consensus_content or "Consensus reached through group discussion",
+                    success=True,
+                    metadata={
+                        "consensus": True,
+                        "confidence": consensus_result.consensus_confidence,
+                        "participants": consensus_result.participants
+                    }
+                )
+            else:
+                final_output = AgentResponse(
+                    content="Group discussion completed without consensus",
+                    success=True,
+                    metadata={
+                        "consensus": False,
+                        "participants": participants
+                    }
+                )
+            
             response.final_output = final_output
+            response.success = True
+            
+            # Update response metadata
+            response.metadata.update({
+                "group_chat_session": session.session_id,
+                "consensus_reached": consensus_result.consensus_reached,
+                "consensus_confidence": consensus_result.consensus_confidence,
+                "participants": participants,
+                "message_count": len(messages)
+            })
+            
+            # End session
+            await self.group_chat_manager.end_session(session.session_id)
             
         except Exception as e:
-            logger.error("Group chat orchestration failed", error=e)
+            logger.error(f"Group chat orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"group-error-{datetime.utcnow().timestamp()}",
                 agent_name="group_chat_orchestration",
@@ -585,8 +649,8 @@ class EnterpriseOrchestrationEngine:
     ):
         """Execute Magentic orchestration using Microsoft SK"""
         try:
-            # Get Magentic orchestration
-            orchestration = self.orchestrations["magentic"]
+            # Get Magentic orchestration (with fallback to sequential)
+            orchestration = self.orchestrations.get("magentic", self.orchestrations["sequential"])
             
             # Create task message
             task_message = ChatMessageContent(
@@ -616,7 +680,7 @@ class EnterpriseOrchestrationEngine:
             response.final_output = final_output
             
         except Exception as e:
-            logger.error("Magentic orchestration failed", error=e)
+            logger.error(f"Magentic orchestration failed: {str(e)}")
             error_step = OrchestrationStep(
                 step_id=f"magentic-error-{datetime.utcnow().timestamp()}",
                 agent_name="magentic_orchestration",
@@ -761,7 +825,7 @@ class EnterpriseOrchestrationEngine:
             }
             
         except Exception as e:
-            logger.error("Health check failed", error=e)
+            logger.error(f"Health check failed: {str(e)}")
             return {
                 "status": "unhealthy",
                 "uptime": 0,

@@ -23,6 +23,11 @@ from shared.config.settings import MicroserviceSettings
 from shared.infrastructure.database import DatabaseManager
 from shared.models import AgentRequest, AgentResponse, AgentCapabilities, HealthResponse
 from shared.infrastructure.observability.logging import get_logger
+from shared.infrastructure.discovery_integration import (
+    ServiceDiscoveryIntegration,
+    create_service_discovery_config,
+    set_global_integration
+)
 
 # Import GitLab agent implementation
 from gitlab_agent import GitLabAgent
@@ -33,12 +38,13 @@ logger = get_logger(__name__)
 
 # Global agent instance
 gitlab_agent: Optional[GitLabAgent] = None
+service_discovery_integration: Optional[ServiceDiscoveryIntegration] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    global gitlab_agent
+    global gitlab_agent, service_discovery_integration
     
     # Startup
     logger.info("Starting GitLab Agent Service")
@@ -52,6 +58,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Database connection failed (continuing without database): {e}")
             db_manager = None
+        
+        # Initialize service discovery integration
+        try:
+            service_discovery_config = create_service_discovery_config(
+                service_name=settings.service_name,
+                service_port=settings.service_port,
+                health_endpoint="/health",
+                tags=["gitlab-agent", "agent", "gitlab"],
+                metadata={
+                    "version": settings.service_version,
+                    "environment": settings.environment.value,
+                    "capabilities": ["gitlab_integration", "project_management", "issue_tracking", "merge_request_management", "repository_operations"]
+                }
+            )
+            
+            service_discovery_integration = ServiceDiscoveryIntegration(settings, service_discovery_config)
+            await service_discovery_integration.initialize()
+            
+            # Set global integration for easy access
+            set_global_integration(service_discovery_integration)
+            
+            logger.info("Service discovery integration initialized successfully")
+        except Exception as e:
+            logger.warning(f"Service discovery integration failed (continuing without service discovery): {e}")
+            service_discovery_integration = None
         
         # Initialize GitLab agent
         gitlab_agent = GitLabAgent(settings)
@@ -67,12 +98,20 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("Shutting down GitLab Agent Service")
+    
     if gitlab_agent:
         try:
             await gitlab_agent.cleanup()
             logger.info("GitLab agent cleaned up successfully")
         except Exception as e:
             logger.error(f"Error cleaning up GitLab agent: {e}")
+    
+    if service_discovery_integration:
+        try:
+            await service_discovery_integration.shutdown()
+            logger.info("Service discovery integration cleaned up successfully")
+        except Exception as e:
+            logger.error(f"Error cleaning up service discovery integration: {e}")
 
 
 # Create FastAPI app
@@ -101,15 +140,64 @@ async def health_check():
         HealthResponse: The health status of the service.
     """
     if gitlab_agent:
+        # Get service discovery health if available
+        discovery_health = {}
+        if service_discovery_integration and service_discovery_integration.discovery_manager:
+            try:
+                discovery_health = await service_discovery_integration.discovery_manager.health_check()
+            except Exception as e:
+                logger.warning(f"Failed to get service discovery health: {e}")
+        
         return HealthResponse(
             status="healthy",
             service="gitlab-agent",
             version=settings.service_version,
             uptime=(datetime.utcnow() - gitlab_agent._start_time).total_seconds() if hasattr(gitlab_agent, '_start_time') else 0,
             timestamp=datetime.utcnow(),
-            metadata=gitlab_agent.get_health_status()
+            metadata={
+                **gitlab_agent.get_health_status(),
+                "service_discovery": discovery_health
+            }
         )
     raise HTTPException(status_code=503, detail="GitLab Agent not initialized")
+
+
+@app.get("/service-info", summary="Get service discovery information")
+async def get_service_info():
+    """
+    Get service discovery information for the GitLab Agent.
+    Returns:
+        dict: Service discovery information.
+    """
+    if service_discovery_integration:
+        return {
+            "service_name": settings.service_name,
+            "service_port": settings.service_port,
+            "version": settings.service_version,
+            "environment": settings.environment.value,
+            "tags": ["gitlab-agent", "agent", "gitlab"],
+            "metadata": {
+                "capabilities": ["gitlab_integration", "project_management", "issue_tracking", "merge_request_management", "repository_operations"]
+            },
+            "is_initialized": service_discovery_integration.is_initialized
+        }
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
+
+
+@app.get("/metrics", summary="Get service discovery metrics")
+async def get_metrics():
+    """
+    Get service discovery metrics for the GitLab Agent.
+    Returns:
+        dict: Service discovery metrics.
+    """
+    if service_discovery_integration and service_discovery_integration.discovery_manager:
+        try:
+            return await service_discovery_integration.discovery_manager.get_metrics()
+        except Exception as e:
+            logger.error(f"Failed to get service discovery metrics: {e}")
+            return {"error": str(e)}
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
 
 
 @app.get("/capabilities", response_model=AgentCapabilities, summary="Get agent capabilities")

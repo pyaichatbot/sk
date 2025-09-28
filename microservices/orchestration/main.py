@@ -37,6 +37,11 @@ from shared.models import (
     OrchestrationRequest, OrchestrationResponse, OrchestrationPattern,
     OrchestrationStatus, OrchestrationStep, OrchestrationMetrics
 )
+from shared.infrastructure.discovery_integration import (
+    ServiceDiscoveryIntegration,
+    create_service_discovery_config,
+    set_global_integration
+)
 import logging
 
 # Import orchestration implementation
@@ -60,11 +65,12 @@ orchestration_engine: Optional[EnterpriseOrchestrationEngine] = None
 session_manager: Optional[SessionManager] = None
 agent_factory: Optional[AgentFactory] = None
 intermediate_messaging_service: Optional[IntermediateMessagingService] = None
+service_discovery_integration: Optional[ServiceDiscoveryIntegration] = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan management"""
-    global orchestration_engine, session_manager, agent_factory, intermediate_messaging_service
+    global orchestration_engine, session_manager, agent_factory, intermediate_messaging_service, service_discovery_integration
     
     try:
         logger.info("Initializing Orchestration Service")
@@ -80,6 +86,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Database connection failed (continuing without database): {e}")
             db_manager = None
+        
+        # Initialize service discovery integration
+        try:
+            service_discovery_config = create_service_discovery_config(
+                service_name=settings.service_name,
+                service_port=settings.service_port,
+                health_endpoint="/health",
+                tags=["orchestration", "orchestrator", "workflow", "coordination"],
+                metadata={
+                    "version": settings.service_version,
+                    "environment": settings.environment.value,
+                    "capabilities": ["agent_orchestration", "workflow_management", "session_management", "real_time_streaming"]
+                }
+            )
+            
+            service_discovery_integration = ServiceDiscoveryIntegration(settings, service_discovery_config)
+            await service_discovery_integration.initialize()
+            
+            # Set global integration for easy access
+            set_global_integration(service_discovery_integration)
+            
+            logger.info("Service discovery integration initialized successfully")
+        except Exception as e:
+            logger.warning(f"Service discovery integration failed (continuing without service discovery): {e}")
+            service_discovery_integration = None
         
         # Initialize components
         session_manager = SessionManager(settings)
@@ -138,6 +169,16 @@ async def lifespan(app: FastAPI):
                 logger.warning("Session manager cleanup timed out")
             except Exception as e:
                 logger.error(f"Error cleaning up session manager: {e}")
+        
+        # Cleanup service discovery integration
+        if service_discovery_integration:
+            try:
+                await asyncio.wait_for(service_discovery_integration.shutdown(), timeout=5.0)
+                logger.info("Service discovery integration cleaned up successfully")
+            except asyncio.TimeoutError:
+                logger.warning("Service discovery integration cleanup timed out")
+            except Exception as e:
+                logger.error(f"Error cleaning up service discovery integration: {e}")
         
         logger.info("Orchestration Service shutdown completed")
 
@@ -206,6 +247,14 @@ async def health_check():
                 checks={"orchestration_engine": {"status": "not_initialized"}}
             )
         
+        # Get service discovery health if available
+        discovery_health = {}
+        if service_discovery_integration and service_discovery_integration.discovery_manager:
+            try:
+                discovery_health = await service_discovery_integration.discovery_manager.health_check()
+            except Exception as e:
+                logger.warning(f"Failed to get service discovery health: {e}")
+        
         health_status = await orchestration_engine.get_health_status()
         return HealthResponse(
             status=health_status.get("status", "healthy"),
@@ -213,10 +262,14 @@ async def health_check():
             version="1.0.0",
             uptime=health_status.get("uptime", 0),
             checks=health_status.get("checks", {}),
-            dependencies=health_status.get("dependencies", {})
+            dependencies=health_status.get("dependencies", {}),
+            metadata={
+                **health_status.get("metadata", {}),
+                "service_discovery": discovery_health
+            }
         )
     except Exception as e:
-        logger.error("Health check failed", error=e)
+        logger.error(f"Health check failed: {str(e)}")
         return HealthResponse(
             status="unhealthy",
             service="orchestration-service",
@@ -224,6 +277,44 @@ async def health_check():
             uptime=0,
             checks={"error": {"status": str(e)}}
         )
+
+
+@app.get("/service-info", summary="Get service discovery information")
+async def get_service_info():
+    """
+    Get service discovery information for the Orchestration Service.
+    Returns:
+        dict: Service discovery information.
+    """
+    if service_discovery_integration:
+        return {
+            "service_name": "orchestration",
+            "service_port": 8001,
+            "version": "1.0.0",
+            "environment": "production",
+            "tags": ["orchestration", "orchestrator", "workflow", "coordination"],
+            "metadata": {
+                "capabilities": ["agent_orchestration", "workflow_management", "session_management", "real_time_streaming"]
+            },
+            "is_initialized": service_discovery_integration.is_initialized
+        }
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
+
+
+@app.get("/discovery-metrics", summary="Get service discovery metrics")
+async def get_discovery_metrics():
+    """
+    Get service discovery metrics for the Orchestration Service.
+    Returns:
+        dict: Service discovery metrics.
+    """
+    if service_discovery_integration and service_discovery_integration.discovery_manager:
+        try:
+            return await service_discovery_integration.discovery_manager.get_metrics()
+        except Exception as e:
+            logger.error(f"Failed to get service discovery metrics: {e}")
+            return {"error": str(e)}
+    raise HTTPException(status_code=503, detail="Service discovery not initialized")
 
 # Orchestration endpoints
 @app.post("/orchestrate", response_model=OrchestrationResponse)
@@ -246,7 +337,7 @@ async def orchestrate(
             message=request.message,
             user_id=request.user_id,
             session_id=request.session_id or str(uuid.uuid4()),
-            pattern=request.pattern,
+            pattern=request.pattern.value,
             agents_required=request.agents,
             context=request.context,
             streaming=request.streaming,
@@ -259,7 +350,7 @@ async def orchestrate(
         return result
         
     except Exception as e:
-        logger.error("Orchestration failed", error=e, user_id=request.user_id)
+        logger.error(f"Orchestration failed for user {request.user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Orchestration failed: {str(e)}")
 
 @app.post("/orchestrate/stream")
@@ -314,7 +405,7 @@ async def orchestrate_stream(
         )
         
     except Exception as e:
-        logger.error("Streaming orchestration failed", error=e, user_id=request.user_id)
+        logger.error(f"Streaming orchestration failed for user {request.user_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Streaming orchestration failed: {str(e)}")
 
 # WebSocket endpoint for real-time communication
@@ -354,7 +445,7 @@ async def orchestrate_websocket(
     except WebSocketDisconnect:
         logger.info("WebSocket connection closed", session_id=session_id)
     except Exception as e:
-        logger.error("WebSocket orchestration failed", error=e, session_id=session_id)
+        logger.error(f"WebSocket orchestration failed for session {session_id}: {str(e)}")
         await websocket.close(code=1011, reason=str(e))
 
 # ============================================================================
@@ -429,7 +520,7 @@ async def get_session(
             raise HTTPException(status_code=404, detail="Session not found")
         return session_info
     except Exception as e:
-        logger.error("Failed to get session", error=e, session_id=session_id)
+        logger.error(f"Failed to get session {session_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
 
 @app.delete("/sessions/{session_id}")
@@ -442,7 +533,7 @@ async def delete_session(
         await session_mgr.delete_session(session_id)
         return {"message": "Session deleted successfully"}
     except Exception as e:
-        logger.error("Failed to delete session", error=e, session_id=session_id)
+        logger.error(f"Failed to delete session {session_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
 
 @app.get("/sessions")
@@ -456,7 +547,7 @@ async def list_sessions(
         sessions = await session_mgr.list_sessions(user_id=user_id, limit=limit)
         return {"sessions": sessions}
     except Exception as e:
-        logger.error("Failed to list sessions", error=e)
+        logger.error(f"Failed to list sessions: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
 
 # Pattern and agent information endpoints
@@ -502,7 +593,7 @@ async def get_available_agents(
         agents_info = await engine.get_agents_info()
         return {"agents": agents_info}
     except Exception as e:
-        logger.error("Failed to get agents info", error=e)
+        logger.error(f"Failed to get agents info: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get agents info: {str(e)}")
 
 # Metrics and monitoring endpoints
@@ -515,7 +606,7 @@ async def get_metrics(
         metrics = await engine.get_metrics()
         return metrics
     except Exception as e:
-        logger.error("Failed to get metrics", error=e)
+        logger.error(f"Failed to get metrics: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get metrics: {str(e)}")
 
 @app.get("/history")
@@ -534,7 +625,7 @@ async def get_orchestration_history(
         )
         return {"history": history}
     except Exception as e:
-        logger.error("Failed to get history", error=e)
+        logger.error(f"Failed to get history: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get history: {str(e)}")
 
 if __name__ == "__main__":
