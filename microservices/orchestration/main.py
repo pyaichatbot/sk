@@ -115,6 +115,7 @@ async def lifespan(app: FastAPI):
         # Initialize components
         session_manager = SessionManager(settings)
         agent_factory = AgentFactory(settings)
+        await agent_factory.initialize()
         
         # Initialize intermediate messaging service (MANDATORY)
         intermediate_messaging_service = IntermediateMessagingService(settings)

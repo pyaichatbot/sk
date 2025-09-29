@@ -163,7 +163,7 @@ class DocumentProcessor:
                 raise ValueError(f"Unsupported file format: {file_ext}")
         
         except Exception as e:
-            logger.error("Text extraction failed", error=e, file_path=str(file_path))
+            logger.error(f"Text extraction failed for file {file_path}: {str(e)}")
             raise
     
     @classmethod
@@ -538,7 +538,7 @@ class DocumentStore:
             return doc_metadata.document_id
             
         except Exception as e:
-            logger.error("Failed to add document", error=e, file_path=file_path)
+            logger.error(f"Failed to add document for file {file_path}: {str(e)}")
             raise
     
     async def get_document(self, document_id: str) -> Optional[Dict[str, Any]]:
@@ -591,7 +591,7 @@ class DocumentStore:
             return enhanced_results
             
         except Exception as e:
-            logger.error("Document search failed", error=e, query=query)
+            logger.error(f"Document search failed for query '{query}': {str(e)}")
             raise
     
     async def list_documents(self) -> List[Dict[str, Any]]:
@@ -627,7 +627,7 @@ class DocumentStore:
             return True
             
         except Exception as e:
-            logger.error("Failed to remove document", error=e, document_id=document_id)
+            logger.error(f"Failed to remove document {document_id}: {str(e)}")
             return False
     
     async def get_document_stats(self) -> Dict[str, Any]:

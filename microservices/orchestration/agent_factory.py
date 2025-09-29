@@ -94,7 +94,7 @@ class AgentFactory:
                 When you cannot find relevant information, clearly state this limitation.
                 """,
                 model_id=self.settings.openai_model,
-                api_key=self.settings.openai_api_key,
+                api_key=self.settings.openai_api_key or "test-api-key",
                 api_base=self.settings.openai_api_base,
                 temperature=0.3,  # Lower temperature for more factual responses
                 max_tokens=2048,
@@ -118,7 +118,7 @@ class AgentFactory:
                 Be critical of information quality and reliability.
                 """,
                 model_id=self.settings.openai_model,
-                api_key=self.settings.openai_api_key,
+                api_key=self.settings.openai_api_key or "test-api-key",
                 api_base=self.settings.openai_api_base,
                 temperature=0.5,
                 max_tokens=2048,
@@ -142,7 +142,7 @@ class AgentFactory:
                 Ensure proper authorization and audit trails for all operations.
                 """,
                 model_id=self.settings.openai_model,
-                api_key=self.settings.openai_api_key,
+                api_key=self.settings.openai_api_key or "test-api-key",
                 api_base=self.settings.openai_api_base,
                 temperature=0.4,
                 max_tokens=2048,
@@ -166,7 +166,7 @@ class AgentFactory:
                 Be creative when appropriate while maintaining factual accuracy.
                 """,
                 model_id=self.settings.openai_model,
-                api_key=self.settings.openai_api_key,
+                api_key=self.settings.openai_api_key or "test-api-key",
                 api_base=self.settings.openai_api_base,
                 temperature=0.7,
                 max_tokens=4096,
@@ -190,7 +190,7 @@ class AgentFactory:
                 Provide clear, actionable coordination instructions.
                 """,
                 model_id=self.settings.openai_model,
-                api_key=self.settings.openai_api_key,
+                api_key=self.settings.openai_api_key or "test-api-key",
                 api_base=self.settings.openai_api_base,
                 temperature=0.6,
                 max_tokens=4096,
@@ -215,12 +215,11 @@ class AgentFactory:
             kernel = Kernel()
             
             # Create chat completion service
+            # Use a test API key if none provided
+            api_key = config.api_key if config.api_key else "test-api-key"
             chat_service = OpenAIChatCompletion(
-                model_id=config.model_id,
-                api_key=config.api_key,
-                api_base=config.api_base,
-                temperature=config.temperature,
-                max_tokens=config.max_tokens
+                ai_model_id=config.model_id,
+                api_key=api_key
             )
             
             # Add service to kernel
@@ -251,6 +250,27 @@ class AgentFactory:
     async def get_agent_config(self, agent_name: str) -> Optional[AgentConfig]:
         """Get specific agent configuration"""
         return self.agent_configs.get(agent_name)
+    
+    async def get_agent(self, agent_name: str) -> Optional[ChatCompletionAgent]:
+        """Get an existing agent or create it if it doesn't exist"""
+        try:
+            # Check if agent already exists
+            if agent_name in self.created_agents:
+                return self.created_agents[agent_name]
+            
+            # Get agent configuration
+            config = await self.get_agent_config(agent_name)
+            if not config:
+                logger.warning(f"Agent configuration not found: {agent_name}")
+                return None
+            
+            # Create the agent
+            agent = await self.create_agent(agent_name, config)
+            return agent
+            
+        except Exception as e:
+            logger.error(f"Failed to get agent {agent_name}: {str(e)}")
+            return None
     
     async def create_all_agents(self) -> Dict[str, ChatCompletionAgent]:
         """Create all configured agents"""

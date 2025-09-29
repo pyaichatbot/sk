@@ -161,7 +161,7 @@ class IntermediateMessagingService:
             logger.info("Intermediate Messaging Service initialized successfully")
             
         except Exception as e:
-            logger.error("Failed to initialize Intermediate Messaging Service", error=e)
+            logger.error(f"Failed to initialize Intermediate Messaging Service: {str(e)}")
             raise
     
     async def cleanup(self):
@@ -182,7 +182,7 @@ class IntermediateMessagingService:
             logger.info("Intermediate Messaging Service cleanup completed")
             
         except Exception as e:
-            logger.error("Failed to cleanup Intermediate Messaging Service", error=e)
+            logger.error(f"Failed to cleanup Intermediate Messaging Service: {str(e)}")
     
     async def emit_event(self, event: AgentCallEvent) -> bool:
         """
@@ -209,12 +209,12 @@ class IntermediateMessagingService:
             
             # Update metrics
             self.metrics.total_events += 1
-            self.metrics.events_by_type[event.event_type.value] = \
-                self.metrics.events_by_type.get(event.event_type.value, 0) + 1
+            self.metrics.events_by_type[event.event_type] = \
+                self.metrics.events_by_type.get(event.event_type, 0) + 1
             self.metrics.events_by_agent[event.agent_name] = \
                 self.metrics.events_by_agent.get(event.agent_name, 0) + 1
-            self.metrics.events_by_status[event.status.value] = \
-                self.metrics.events_by_status.get(event.status.value, 0) + 1
+            self.metrics.events_by_status[event.status] = \
+                self.metrics.events_by_status.get(event.status, 0) + 1
             
             # Broadcast to subscribers
             await self._broadcast_event(event)
@@ -232,7 +232,7 @@ class IntermediateMessagingService:
             return True
             
         except Exception as e:
-            logger.error("Failed to emit event", error=e, event_id=event.id)
+            logger.error(f"Failed to emit event {event.id}: {str(e)}")
             self.circuit_breaker.record_failure()
             return False
     
@@ -282,7 +282,7 @@ class IntermediateMessagingService:
             return connection_id
             
         except Exception as e:
-            logger.error("Failed to create WebSocket subscription", error=e)
+            logger.error(f"Failed to create WebSocket subscription: {str(e)}")
             raise
     
     async def unsubscribe_from_events(self, connection_id: str):
@@ -298,7 +298,7 @@ class IntermediateMessagingService:
             logger.info("WebSocket subscription closed", connection_id=connection_id)
             
         except Exception as e:
-            logger.error("Failed to close WebSocket subscription", error=e, connection_id=connection_id)
+            logger.error(f"Failed to close WebSocket subscription for connection {connection_id}: {str(e)}")
     
     async def get_events(
         self,
@@ -329,7 +329,7 @@ class IntermediateMessagingService:
             return events[:limit]
             
         except Exception as e:
-            logger.error("Failed to get events", error=e, session_id=session_id)
+            logger.error(f"Failed to get events for session {session_id}: {str(e)}")
             return []
     
     async def get_metrics(self) -> AgentCallMetrics:
@@ -363,12 +363,12 @@ class IntermediateMessagingService:
                 "active_connections": self.metrics.active_connections,
                 "total_events": self.metrics.total_events,
                 "error_rate": self.metrics.error_rate,
-                "circuit_breaker_state": self.circuit_breaker.state.value,
+                "circuit_breaker_state": self.circuit_breaker.state,
                 "issues": issues
             }
             
         except Exception as e:
-            logger.error("Failed to get health status", error=e)
+            logger.error(f"Failed to get health status: {str(e)}")
             return {
                 "status": "unhealthy",
                 "uptime": 0,
@@ -417,7 +417,7 @@ class IntermediateMessagingService:
                 await self._close_connection(connection_id)
                 
         except Exception as e:
-            logger.error("Failed to broadcast event", error=e, event_id=event.id)
+            logger.error(f"Failed to broadcast event {event.id}: {str(e)}")
     
     async def _close_connection(self, connection_id: str):
         """Close a WebSocket connection and cleanup resources"""
@@ -436,7 +436,7 @@ class IntermediateMessagingService:
                 self.metrics.active_connections = max(0, self.metrics.active_connections - 1)
                 
         except Exception as e:
-            logger.error("Failed to close connection", error=e, connection_id=connection_id)
+            logger.error(f"Failed to close connection {connection_id}: {str(e)}")
     
     async def _cleanup_old_events(self):
         """Background task to cleanup old events"""
@@ -470,7 +470,7 @@ class IntermediateMessagingService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("Error in cleanup task", error=e)
+                logger.error(f"Error in cleanup task: {str(e)}")
     
     async def _update_metrics(self):
         """Background task to update metrics"""
@@ -486,7 +486,7 @@ class IntermediateMessagingService:
                 
                 # Calculate error rate
                 if self.metrics.total_events > 0:
-                    error_events = self.metrics.events_by_status.get(AgentCallStatus.FAILED.value, 0)
+                    error_events = self.metrics.events_by_status.get(AgentCallStatus.FAILED, 0)
                     self.metrics.error_rate = error_events / self.metrics.total_events
                 
                 # Update last updated timestamp
@@ -495,7 +495,7 @@ class IntermediateMessagingService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error("Error in metrics update task", error=e)
+                logger.error(f"Error in metrics update task: {str(e)}")
 
 # Global service instance
 _intermediate_messaging_service: Optional[IntermediateMessagingService] = None

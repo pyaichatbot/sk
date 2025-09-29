@@ -536,8 +536,16 @@ class ServiceDiscoveryManager:
                     "DeregisterCriticalServiceAfter": "3m"
                 }
             
-            # Register service
-            await self.consul.agent.service.register(**service_data)
+            # Register service using the correct Consul Python client API
+            await self.consul.agent.service.register(
+                name=service_name,
+                service_id=service_id,
+                address=host,
+                port=port,
+                tags=service_info.get("tags", []),
+                meta=service_data["Meta"],
+                check=service_data.get("Check")
+            )
             
             # Store service ID for cleanup
             self._registered_services[service_name] = service_id

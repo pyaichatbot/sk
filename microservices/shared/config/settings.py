@@ -46,6 +46,13 @@ class MicroserviceSettings(BaseSettings):
     access_token_expire_minutes: int = Field(default=60, description="Access token expiration")
     algorithm: str = Field(default="HS256", description="JWT algorithm")
     
+    # OpenAI Configuration
+    openai_api_key: str = Field(default="", description="OpenAI API key")
+    openai_model: str = Field(default="gpt-3.5-turbo", description="OpenAI model to use")
+    openai_api_base: Optional[str] = Field(default=None, description="OpenAI API base URL")
+    openai_temperature: float = Field(default=0.7, description="OpenAI temperature setting")
+    openai_max_tokens: int = Field(default=4096, description="OpenAI max tokens")
+    
     # Database
     postgres_host: str = Field(default="localhost", description="PostgreSQL host")
     postgres_port: int = Field(default=5432, description="PostgreSQL port")

@@ -421,18 +421,11 @@ async def emit_agent_call_event(
         
         if success:
             logger.debug(
-                "Agent call event emitted",
-                event_type=event_type,
-                agent_name=agent_name,
-                session_id=session_id,
-                correlation_id=event.correlation_id
+                f"Agent call event emitted: {event_type} for agent {agent_name} in session {session_id} with correlation {event.correlation_id}"
             )
         else:
             logger.warning(
-                "Failed to emit agent call event",
-                event_type=event_type,
-                agent_name=agent_name,
-                session_id=session_id
+                f"Failed to emit agent call event: {event_type} for agent {agent_name} in session {session_id}"
             )
         
         return success
